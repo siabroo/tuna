@@ -19,3 +19,6 @@ testbin/
 
 # Generated docs preview
 site/
+
+# Release build artifacts
+dist/

@@ -1,0 +1,14 @@
+# An example WorkloadRecommendation. Normally these are auto-created
+# by the DiscoveryController when a Deployment opts in via
+# tuna.siabroo.github.io/analyze=true. This file is provided as a
+# reference for what the resulting object looks like.
+apiVersion: tuna.siabroo.github.io/v1alpha1
+kind: WorkloadRecommendation
+metadata:
+  name: example
+  namespace: default
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: example-deployment

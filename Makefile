@@ -37,3 +37,35 @@ envtest: ## Download envtest binaries.
 .PHONY: lint
 lint: ## Run golangci-lint.
 	go run github.com/golangci/golangci-lint/cmd/golangci-lint run ./...
+
+KUSTOMIZE := go run sigs.k8s.io/kustomize/kustomize/v5
+
+.PHONY: install-crd
+install-crd: manifests ## Install CRDs into the current cluster.
+	$(KUSTOMIZE) build config/crd | kubectl apply -f -
+
+.PHONY: uninstall-crd
+uninstall-crd: ## Remove CRDs.
+	$(KUSTOMIZE) build config/crd | kubectl delete --ignore-not-found -f -
+
+.PHONY: deploy
+deploy: manifests ## Deploy operator to current cluster.
+	cd config/manager && $(KUSTOMIZE) edit set image ghcr.io/siabroo/tuna=$(IMG)
+	$(KUSTOMIZE) build config/default | kubectl apply -f -
+
+.PHONY: undeploy
+undeploy: ## Tear down operator.
+	$(KUSTOMIZE) build config/default | kubectl delete --ignore-not-found -f -
+
+.PHONY: release-manifest
+release-manifest: manifests ## Build a flat release manifest at dist/install.yaml.
+	mkdir -p dist
+	$(KUSTOMIZE) build config/default > dist/install.yaml
+
+.PHONY: docker-build
+docker-build: ## Build the container image.
+	docker build -t $(IMG) .
+
+.PHONY: docker-push
+docker-push: ## Push the container image.
+	docker push $(IMG)
