@@ -78,7 +78,7 @@ func waitForPodReady(t *testing.T, namespace, labelSelector string, timeout time
 	t.Helper()
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		out, err := exec.Command("kubectl", "wait", "--for=condition=Ready",
+		out, err := exec.Command("kubectl", "wait", "--for=condition=Ready", //nolint:gosec // G204: e2e test, hardcoded kubectl args + bounded namespace/labelSelector
 			"-n", namespace, "pod", "-l", labelSelector, "--timeout=5s").CombinedOutput()
 		if err == nil {
 			return true
