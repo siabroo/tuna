@@ -44,16 +44,16 @@ func TestE2E_WorkloadRecommendationProduced(t *testing.T) {
 		t.Fatal("tuna-manager pod did not become Ready")
 	}
 
-	// Sanity: sample-go-app pods Ready.
-	if !waitForPodReady(t, "default", "app=sample-go-app", 2*time.Minute) {
-		t.Fatal("sample-go-app pods did not become Ready")
+	// Sanity: loadgen pods Ready.
+	if !waitForPodReady(t, "default", "app=loadgen", 2*time.Minute) {
+		t.Fatal("loadgen pods did not become Ready")
 	}
 
 	// Wait for WorkloadRecommendation to appear with recommendations.
 	cr := &tunav1alpha1.WorkloadRecommendation{}
 	deadline := time.Now().Add(8 * time.Minute)
 	for time.Now().Before(deadline) {
-		err := cl.Get(ctx, types.NamespacedName{Name: "sample-go-app", Namespace: "default"}, cr)
+		err := cl.Get(ctx, types.NamespacedName{Name: "loadgen", Namespace: "default"}, cr)
 		if err == nil && len(cr.Status.Recommendations) > 0 {
 			break
 		}
@@ -71,7 +71,7 @@ func TestE2E_WorkloadRecommendationProduced(t *testing.T) {
 		t.Errorf("Workload.Type = %v, want go", cr.Status.Workload)
 	}
 
-	t.Logf("E2E success: %d recommendations on sample-go-app", len(cr.Status.Recommendations))
+	t.Logf("E2E success: %d recommendations on loadgen", len(cr.Status.Recommendations))
 }
 
 func waitForPodReady(t *testing.T, namespace, labelSelector string, timeout time.Duration) bool {

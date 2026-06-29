@@ -1,4 +1,4 @@
-module github.com/siabroo/tuna/test/samples/sample-go-app
+module github.com/siabroo/tuna/test/samples/loadgen
 
 go 1.26
 

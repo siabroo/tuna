@@ -74,7 +74,7 @@ docker-push: ## Push the container image.
 KIND_CLUSTER ?= tuna-e2e
 
 .PHONY: e2e-up
-e2e-up: ## Spin up kind + kube-prom-stack + tuna + sample-go-app
+e2e-up: ## Spin up kind + kube-prom-stack + tuna + loadgen
 	kind create cluster --name $(KIND_CLUSTER) --config testdata/kind-config.yaml
 	helm repo add prometheus-community https://prometheus-community.github.io/helm-charts || true
 	helm repo update
@@ -83,12 +83,12 @@ e2e-up: ## Spin up kind + kube-prom-stack + tuna + sample-go-app
 		--set grafana.enabled=false --wait
 	$(MAKE) docker-build IMG=tuna:e2e
 	kind load docker-image tuna:e2e --name $(KIND_CLUSTER)
-	cd test/samples/sample-go-app && docker build -t sample-go-app:dev .
-	kind load docker-image sample-go-app:dev --name $(KIND_CLUSTER)
+	cd test/samples/loadgen && docker build -t loadgen:dev .
+	kind load docker-image loadgen:dev --name $(KIND_CLUSTER)
 	$(MAKE) deploy IMG=tuna:e2e
-	kubectl apply -f test/samples/sample-go-app/service.yaml
-	kubectl apply -f test/samples/sample-go-app/servicemonitor.yaml
-	kubectl apply -f test/samples/sample-go-app/deployment.yaml
+	kubectl apply -f test/samples/loadgen/service.yaml
+	kubectl apply -f test/samples/loadgen/servicemonitor.yaml
+	kubectl apply -f test/samples/loadgen/deployment.yaml
 	@echo "Waiting 5min for samples to accumulate..."
 	@sleep 300
 

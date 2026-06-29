@@ -63,25 +63,25 @@ kubectl rollout status deployment/tuna-manager -n tuna-system --timeout=2m
 
 ```bash
 # Build + push sample app to a registry GKE can pull
-cd test/samples/sample-go-app
-docker build -t gcr.io/$PROJECT/sample-go-app:dev .
-docker push gcr.io/$PROJECT/sample-go-app:dev
+cd test/samples/loadgen
+docker build -t gcr.io/$PROJECT/loadgen:dev .
+docker push gcr.io/$PROJECT/loadgen:dev
 cd ../../..
 
 # Edit deployment.yaml to use the gcr.io image, then:
-kubectl apply -f test/samples/sample-go-app/deployment.yaml
+kubectl apply -f test/samples/loadgen/deployment.yaml
 
 # For GMP, scrape via PodMonitoring CRD instead of ServiceMonitor:
 cat <<EOF | kubectl apply -f -
 apiVersion: monitoring.googleapis.com/v1
 kind: PodMonitoring
 metadata:
-  name: sample-go-app
+  name: loadgen
   namespace: default
 spec:
   selector:
     matchLabels:
-      app: sample-go-app
+      app: loadgen
   endpoints:
     - port: http
       interval: 30s
@@ -96,7 +96,7 @@ EOF
 sleep 600
 
 # Check the CR
-kubectl describe workloadrecommendation sample-go-app
+kubectl describe workloadrecommendation loadgen
 ```
 
 Expected output:
@@ -130,7 +130,7 @@ Status:
 Save the `kubectl describe` output to a dated file:
 
 ```bash
-kubectl describe workloadrecommendation sample-go-app > \
+kubectl describe workloadrecommendation loadgen > \
   docs/cloud-acceptance/$(date +%Y-%m-%d)-gcp.md
 
 git add docs/cloud-acceptance/
@@ -154,9 +154,9 @@ gcloud container clusters delete $CLUSTER --region $REGION --quiet
 - Verify the GMP API is enabled: `gcloud services list | grep monitoring.googleapis.com`
 
 **`WorkloadDetected=False` reason `NoAnalyzerMatched`:**
-- The sample-go-app may not be exporting `go_info` yet — give it 2–3 more minutes
+- The loadgen may not be exporting `go_info` yet — give it 2–3 more minutes
 - Verify scrape config: `kubectl get podmonitoring -A` and check that GMP is collecting
 
 **Empty recommendations despite Ready=True:**
 - All values within 10% suppression threshold — sample app may need more CPU stress
-- Hit `/work` endpoint to generate CPU load: `kubectl exec -n default deployment/sample-go-app -- /metrics`
+- Hit `/load/cpu?percent=80` to generate CPU load: `kubectl exec -n default deployment/loadgen -- wget -qO- 'http://localhost:8080/load/cpu?percent=80' --method=POST`

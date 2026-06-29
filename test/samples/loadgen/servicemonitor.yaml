@@ -1,14 +1,14 @@
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
-  name: sample-go-app
+  name: loadgen
   namespace: default
   labels:
-    release: kube-prom   # match kube-prometheus-stack helm release label
+    release: kube-prom
 spec:
   selector:
     matchLabels:
-      app: sample-go-app
+      app: loadgen
   endpoints:
     - port: http
       interval: 15s

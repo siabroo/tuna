@@ -1,7 +1,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: sample-go-app
+  name: loadgen
   namespace: default
   annotations:
     tuna.siabroo.github.io/analyze: "true"
@@ -9,25 +9,25 @@ spec:
   replicas: 2
   selector:
     matchLabels:
-      app: sample-go-app
+      app: loadgen
   template:
     metadata:
       labels:
-        app: sample-go-app
+        app: loadgen
     spec:
       containers:
         - name: app
-          image: sample-go-app:dev
+          image: loadgen:dev
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
               containerPort: 8080
           env:
+            # Initial load — overrideable at runtime via /load HTTP API.
             - name: LOAD_CPU_PERCENT
               value: "30"
             - name: LOAD_MEM_MB
               value: "40"
-          # Intentionally tight to give tuna something to recommend
           resources:
             requests:
               cpu: 50m
