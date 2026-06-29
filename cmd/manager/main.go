@@ -4,6 +4,7 @@ package main
 import (
 	"flag"
 	"os"
+	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -14,7 +15,9 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	tunav1alpha1 "github.com/siabroo/tuna/api/v1alpha1"
+	"github.com/siabroo/tuna/internal/analyzer"
 	"github.com/siabroo/tuna/internal/controller"
+	"github.com/siabroo/tuna/internal/prom"
 )
 
 var (
@@ -64,6 +67,23 @@ func main() {
 
 	if err := controller.AddDiscoveryController(mgr); err != nil {
 		setupLog.Error(err, "unable to set up DiscoveryController")
+		os.Exit(1)
+	}
+
+	promClient, err := prom.NewClient(prometheusURL, prom.AuthMode(authMode))
+	if err != nil {
+		setupLog.Error(err, "unable to build prom client")
+		os.Exit(1)
+	}
+	interval, err := time.ParseDuration(analysisInterval)
+	if err != nil {
+		setupLog.Error(err, "unable to parse --analysis-interval")
+		os.Exit(1)
+	}
+	if err := controller.AddAnalysisController(mgr, promClient, []analyzer.Analyzer{
+		analyzer.GoAnalyzer{},
+	}, interval); err != nil {
+		setupLog.Error(err, "unable to set up AnalysisController")
 		os.Exit(1)
 	}
 
