@@ -1,6 +1,6 @@
 module github.com/siabroo/tuna
 
-go 1.26.4
+go 1.26.0
 
 require (
 	github.com/google/go-cmp v0.7.0
