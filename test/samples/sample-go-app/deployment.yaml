@@ -22,6 +22,11 @@ spec:
           ports:
             - name: http
               containerPort: 8080
+          env:
+            - name: LOAD_CPU_PERCENT
+              value: "30"
+            - name: LOAD_MEM_MB
+              value: "40"
           # Intentionally tight to give tuna something to recommend
           resources:
             requests:
