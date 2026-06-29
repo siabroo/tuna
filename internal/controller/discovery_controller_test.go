@@ -91,7 +91,6 @@ func TestDiscovery_CreatesCROnAnnotation(t *testing.T) {
 	if or.BlockOwnerDeletion != nil && *or.BlockOwnerDeletion {
 		t.Error("ownerRef.BlockOwnerDeletion should be false (spec P1.2)")
 	}
-
 }
 
 // pollUntil retries fn every 100ms until it returns true or timeout hits.

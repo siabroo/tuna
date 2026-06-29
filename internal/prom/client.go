@@ -57,7 +57,7 @@ func (c *Client) Query(ctx context.Context, q string) (float64, bool, error) {
 	if err != nil {
 		return 0, false, fmt.Errorf("prom query http: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -122,7 +122,7 @@ func (c *Client) QueryFirstLabel(ctx context.Context, query, labelName string) (
 	if err != nil {
 		return "", false, fmt.Errorf("prom query http: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", false, fmt.Errorf("prom read body: %w", err)

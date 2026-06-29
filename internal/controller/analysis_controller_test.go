@@ -81,7 +81,6 @@ func TestAnalysis_ReconciledOnDeploymentChange(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("Deployment change did not trigger reconcile: %v", err)
 	}
-
 }
 
 func TestAnalysis_WritesStatusWithRecommendations(t *testing.T) {

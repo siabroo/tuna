@@ -51,7 +51,7 @@ func (g *gcpIDTokenTransport) RoundTrip(req *http.Request) (*http.Response, erro
 	if err != nil {
 		return nil, fmt.Errorf("gcp metadata id-token: %w", err)
 	}
-	defer tokResp.Body.Close()
+	defer func() { _ = tokResp.Body.Close() }()
 	if tokResp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("gcp metadata id-token: status %d", tokResp.StatusCode)
 	}

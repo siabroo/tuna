@@ -45,7 +45,7 @@ func AddAnalysisController(mgr manager.Manager, p *prom.Client, analyzers []anal
 		Prom:             p,
 		Analyzers:        analyzers,
 		AnalysisInterval: interval,
-		Recorder:         NewDedupRecorder(mgr.GetEventRecorderFor("tuna-manager"), 5*time.Minute),
+		Recorder:         NewDedupRecorder(mgr.GetEventRecorderFor("tuna-manager"), 5*time.Minute), //nolint:staticcheck // SA1019: legacy events API; iter-2 will migrate to GetEventRecorder
 	}
 	return SetupAnalysisControllerWithReconciler(mgr, r)
 }

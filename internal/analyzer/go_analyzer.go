@@ -119,10 +119,10 @@ func currentOrUnset(v string) string {
 }
 
 func (g GoAnalyzer) gomemlimitRec(cur CurrentSettings) *Recommendation {
-	memLim := readBytes(cur.Resources.Limits, corev1.ResourceMemory)
+	memLim := readBytes(cur.Resources.Limits)
 	if memLim == 0 {
 		// fall back to request if limit unset
-		memLim = readBytes(cur.Resources.Requests, corev1.ResourceMemory)
+		memLim = readBytes(cur.Resources.Requests)
 		if memLim == 0 {
 			return nil
 		}
@@ -133,7 +133,7 @@ func (g GoAnalyzer) gomemlimitRec(cur CurrentSettings) *Recommendation {
 		return nil
 	}
 	wantBytes := int64(float64(memLim) * 0.9)
-	wantMiB := int64(wantBytes / (1024 * 1024))
+	wantMiB := wantBytes / (1024 * 1024)
 	recommended := fmt.Sprintf("%dMiB", wantMiB)
 	return &Recommendation{
 		Field:       "env.GOMEMLIMIT",
@@ -249,7 +249,7 @@ func (g GoAnalyzer) resourceRecs(obs ObservedMetrics, cur CurrentSettings, tol f
 
 	// requests.memory — target p95 working set.
 	if obs.MemoryWorkingSetP95Bytes > 0 {
-		curMemReq := readBytes(cur.Resources.Requests, corev1.ResourceMemory)
+		curMemReq := readBytes(cur.Resources.Requests)
 		want := obs.MemoryWorkingSetP95Bytes
 		if !SuppressIfClose(float64(curMemReq), float64(want), tol) {
 			out = append(out, Recommendation{
@@ -264,7 +264,7 @@ func (g GoAnalyzer) resourceRecs(obs ObservedMetrics, cur CurrentSettings, tol f
 
 	// limits.memory — target p99 * 1.20.
 	if obs.MemoryWorkingSetP99Bytes > 0 {
-		curMemLim := readBytes(cur.Resources.Limits, corev1.ResourceMemory)
+		curMemLim := readBytes(cur.Resources.Limits)
 		want := int64(float64(obs.MemoryWorkingSetP99Bytes) * 1.20)
 		if !SuppressIfClose(float64(curMemLim), float64(want), tol) {
 			out = append(out, Recommendation{
@@ -290,9 +290,10 @@ func readMillicores(list corev1.ResourceList, r corev1.ResourceName) int64 {
 	return q.MilliValue()
 }
 
-// readBytes extracts the value of resource r from list in bytes.
-func readBytes(list corev1.ResourceList, r corev1.ResourceName) int64 {
-	q, ok := list[r]
+// readBytes extracts the value of memory resource from list in bytes.
+// Returns 0 if unset.
+func readBytes(list corev1.ResourceList) int64 {
+	q, ok := list[corev1.ResourceMemory]
 	if !ok {
 		return 0
 	}

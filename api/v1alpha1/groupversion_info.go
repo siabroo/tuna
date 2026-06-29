@@ -12,7 +12,7 @@ import (
 var GroupVersion = schema.GroupVersion{Group: "tuna.siabroo.github.io", Version: "v1alpha1"}
 
 // SchemeBuilder is used to add go types to the GroupVersionKind scheme.
-var SchemeBuilder = &scheme.Builder{GroupVersion: GroupVersion}
+var SchemeBuilder = &scheme.Builder{GroupVersion: GroupVersion} //nolint:staticcheck // SA1019: scheme.Builder works fine for v1alpha1; api package will be simplified in v1beta1 migration
 
 // AddToScheme adds the types in this group-version to the given scheme.
 var AddToScheme = SchemeBuilder.AddToScheme

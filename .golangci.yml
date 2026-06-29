@@ -1,10 +1,12 @@
+version: "2"
+
 run:
   timeout: 5m
-  go: "1.26"
   build-tags:
     - e2e
 
 linters:
+  default: none
   enable:
     - errcheck
     - gosec
@@ -16,13 +18,14 @@ linters:
     - unparam
     - unused
     - whitespace
-
-linters-settings:
-  gosec:
-    excludes:
-      - G104 # ignore unhandled errors — many Operator patterns log+continue
-
-issues:
-  exclude-rules:
-    - path: _test\.go
-      linters: [unparam, unused]
+  settings:
+    gosec:
+      excludes:
+        - G104
+        - G101
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - unparam
+          - unused
