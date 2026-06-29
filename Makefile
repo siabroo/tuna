@@ -59,6 +59,7 @@ undeploy: ## Tear down operator.
 
 .PHONY: release-manifest
 release-manifest: manifests ## Build a flat release manifest at dist/install.yaml.
+	cd config/manager && $(KUSTOMIZE) edit set image ghcr.io/siabroo/tuna=$(IMG)
 	mkdir -p dist
 	$(KUSTOMIZE) build config/default > dist/install.yaml
 
