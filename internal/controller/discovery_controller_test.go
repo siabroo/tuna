@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	ctrlconfig "sigs.k8s.io/controller-runtime/pkg/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
 	tunav1alpha1 "github.com/siabroo/tuna/api/v1alpha1"
@@ -112,9 +113,15 @@ func pollUntil(ctx context.Context, timeout time.Duration, fn func() bool) error
 }
 
 // startManagerWith creates a manager, registers a setup function, and returns it.
+// SkipNameValidation is set so that multiple test managers in the same process
+// can each register a controller with the same type-derived name without error.
 func startManagerWith(t *testing.T, env *testenv.Env, setup func(manager.Manager) error) manager.Manager {
 	t.Helper()
-	mgr, err := manager.New(env.Config, manager.Options{Scheme: env.Client.Scheme()})
+	skip := true
+	mgr, err := manager.New(env.Config, manager.Options{
+		Scheme:     env.Client.Scheme(),
+		Controller: ctrlconfig.Controller{SkipNameValidation: &skip},
+	})
 	if err != nil {
 		t.Fatalf("manager.New: %v", err)
 	}
@@ -122,4 +129,59 @@ func startManagerWith(t *testing.T, env *testenv.Env, setup func(manager.Manager
 		t.Fatalf("setup: %v", err)
 	}
 	return mgr
+}
+
+func TestDiscovery_DeletesCROnAnnotationRemoval(t *testing.T) {
+	env := testenv.Start(t)
+	mgr := startManagerWith(t, env, controller.AddDiscoveryController)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	go func() { _ = mgr.Start(ctx) }()
+
+	dep := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "backend2",
+			Namespace: "default",
+			Annotations: map[string]string{
+				controller.AnalyzeAnnotation: "true",
+			},
+		},
+		Spec: appsv1.DeploymentSpec{
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "backend2"}},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "backend2"}},
+				Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "app", Image: "x"}}},
+			},
+		},
+	}
+	if err := env.Client.Create(ctx, dep); err != nil {
+		t.Fatalf("create Deployment: %v", err)
+	}
+
+	// Wait for CR to appear (Task 4 behavior).
+	if err := pollUntil(ctx, 5*time.Second, func() bool {
+		cr := &tunav1alpha1.WorkloadRecommendation{}
+		return env.Client.Get(ctx, types.NamespacedName{Name: "backend2", Namespace: "default"}, cr) == nil
+	}); err != nil {
+		t.Fatalf("CR not created within 5s: %v", err)
+	}
+
+	// Remove the annotation.
+	if err := env.Client.Get(ctx, types.NamespacedName{Name: "backend2", Namespace: "default"}, dep); err != nil {
+		t.Fatalf("re-fetch dep: %v", err)
+	}
+	delete(dep.Annotations, controller.AnalyzeAnnotation)
+	if err := env.Client.Update(ctx, dep); err != nil {
+		t.Fatalf("update dep: %v", err)
+	}
+
+	// CR should be gone within 5s.
+	if err := pollUntil(ctx, 5*time.Second, func() bool {
+		cr := &tunav1alpha1.WorkloadRecommendation{}
+		err := env.Client.Get(ctx, types.NamespacedName{Name: "backend2", Namespace: "default"}, cr)
+		return errors.IsNotFound(err)
+	}); err != nil {
+		t.Fatalf("CR still present after annotation removal: %v", err)
+	}
 }
