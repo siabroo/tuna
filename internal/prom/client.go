@@ -61,7 +61,7 @@ func (c *Client) Query(ctx context.Context, q string) (float64, bool, error) {
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return 0, false, err
+		return 0, false, fmt.Errorf("prom read body: %w", err)
 	}
 	if resp.StatusCode >= 400 && resp.StatusCode != 422 {
 		return 0, false, fmt.Errorf("prom http %d: %s", resp.StatusCode, string(body))

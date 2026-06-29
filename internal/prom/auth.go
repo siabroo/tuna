@@ -2,6 +2,7 @@ package prom
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 )
 
@@ -54,12 +55,14 @@ func (g *gcpIDTokenTransport) RoundTrip(req *http.Request) (*http.Response, erro
 	if tokResp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("gcp metadata id-token: status %d", tokResp.StatusCode)
 	}
-	buf := make([]byte, 4096)
-	n, _ := tokResp.Body.Read(buf)
-	if n == 0 {
+	tokenBytes, err := io.ReadAll(tokResp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("gcp metadata id-token: read body: %w", err)
+	}
+	if len(tokenBytes) == 0 {
 		return nil, fmt.Errorf("gcp metadata id-token: empty body")
 	}
-	token := string(buf[:n])
+	token := string(tokenBytes)
 	// Defensive copy so we don't mutate the caller's request.
 	req2 := req.Clone(req.Context())
 	req2.Header.Set("Authorization", "Bearer "+token)
