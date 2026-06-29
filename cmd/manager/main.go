@@ -12,6 +12,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+
+	tunav1alpha1 "github.com/siabroo/tuna/api/v1alpha1"
 )
 
 var (
@@ -21,7 +23,7 @@ var (
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-	// tuna CRD scheme will be added here in Task 2.
+	utilruntime.Must(tunav1alpha1.AddToScheme(scheme))
 }
 
 func main() {

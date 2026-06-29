@@ -1,0 +1,18 @@
+# Layout & repository for this project follow kubebuilder conventions.
+# This file is consumed by controller-gen and similar tooling.
+domain: siabroo.github.io
+layout:
+- go.kubebuilder.io/v4
+projectName: tuna
+repo: github.com/siabroo/tuna
+resources:
+- api:
+    crdVersion: v1
+    namespaced: false
+  controller: true
+  domain: siabroo.github.io
+  group: tuna
+  kind: WorkloadRecommendation
+  path: github.com/siabroo/tuna/api/v1alpha1
+  version: v1alpha1
+version: "3"
