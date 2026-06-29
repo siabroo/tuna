@@ -1,0 +1,21 @@
+# Build artifacts
+bin/
+tuna
+manager
+*.test
+*.out
+
+# Editor
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+
+# Local k8s test artifacts
+kubeconfig
+.kube/
+testbin/
+
+# Generated docs preview
+site/
