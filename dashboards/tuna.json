@@ -1,0 +1,418 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "type": "row",
+      "title": "All Go workloads — overview",
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0},
+      "id": 100
+    },
+    {
+      "type": "table",
+      "title": "Go workloads scraped by Prometheus",
+      "description": "Every pod exposing /metrics with the Go runtime collector. Columns join CPU usage, memory working set, and goroutine count across workloads. Use this to spot the candidate that's interesting, then drill via the namespace/pod selectors.",
+      "gridPos": {"h": 10, "w": 24, "x": 0, "y": 1},
+      "id": 1,
+      "targets": [
+        {
+          "expr": "max by (namespace, workload, workload_type, version) (go_info{namespace=~\"$namespace\",pod!=\"\"} * on (namespace, pod) group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{namespace=~\"$namespace\"})",
+          "format": "table",
+          "instant": true,
+          "refId": "A"
+        },
+        {
+          "expr": "sum by (namespace, workload, workload_type) (go_goroutines{namespace=~\"$namespace\",pod!=\"\"} * on (namespace, pod) group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{namespace=~\"$namespace\"})",
+          "format": "table",
+          "instant": true,
+          "refId": "B"
+        },
+        {
+          "expr": "sum by (namespace, workload, workload_type) (rate(container_cpu_usage_seconds_total{namespace=~\"$namespace\",container=\"app\"}[5m]) * on (namespace, pod) group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{namespace=~\"$namespace\"}) * 1000",
+          "format": "table",
+          "instant": true,
+          "refId": "C"
+        },
+        {
+          "expr": "sum by (namespace, workload, workload_type) (container_memory_working_set_bytes{namespace=~\"$namespace\",container=\"app\"} * on (namespace, pod) group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{namespace=~\"$namespace\"}) / 1024 / 1024",
+          "format": "table",
+          "instant": true,
+          "refId": "D"
+        },
+        {
+          "expr": "sum by (namespace, workload, workload_type) (rate(container_cpu_cfs_throttled_periods_total{namespace=~\"$namespace\",container=\"app\"}[5m]) * on (namespace, pod) group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{namespace=~\"$namespace\"}) / sum by (namespace, workload, workload_type) (rate(container_cpu_cfs_periods_total{namespace=~\"$namespace\",container=\"app\"}[5m]) * on (namespace, pod) group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{namespace=~\"$namespace\"}) * 100",
+          "format": "table",
+          "instant": true,
+          "refId": "E"
+        },
+        {
+          "expr": "count by (namespace, workload, workload_type) (namespace_workload_pod:kube_pod_owner:relabel{namespace=~\"$namespace\"} and on (namespace, pod) go_info)",
+          "format": "table",
+          "instant": true,
+          "refId": "F"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "joinByField",
+          "options": {
+            "byField": "workload",
+            "mode": "outer"
+          }
+        },
+        {
+          "id": "filterByValue",
+          "options": {
+            "filters": [
+              {
+                "fieldName": "Value #B",
+                "config": {
+                  "id": "isNotNull",
+                  "options": {}
+                }
+              }
+            ],
+            "type": "include",
+            "match": "all"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true, "Time 1": true, "Time 2": true, "Time 3": true, "Time 4": true, "Time 5": true, "Time 6": true,
+              "namespace 2": true, "namespace 3": true, "namespace 4": true, "namespace 5": true, "namespace 6": true,
+              "workload_type 2": true, "workload_type 3": true, "workload_type 4": true, "workload_type 5": true, "workload_type 6": true,
+              "Value #A": true
+            },
+            "indexByName": {
+              "namespace 1": 0,
+              "workload": 1,
+              "workload_type 1": 2,
+              "Value #F": 3,
+              "version": 4,
+              "Value #B": 5,
+              "Value #C": 6,
+              "Value #D": 7,
+              "Value #E": 8
+            },
+            "renameByName": {
+              "namespace 1": "namespace",
+              "workload_type 1": "kind",
+              "Value #F": "pods",
+              "Value #B": "goroutines",
+              "Value #C": "CPU (mCPU)",
+              "Value #D": "memory (MiB)",
+              "Value #E": "throttled %",
+              "version": "Go ver"
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {"type": "auto"}
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "goroutines"},
+            "properties": [
+              {"id": "custom.cellOptions", "value": {"type": "color-text"}},
+              {"id": "thresholds", "value": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 100},
+                  {"color": "red", "value": 1000}
+                ]
+              }}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "CPU (mCPU)"},
+            "properties": [
+              {"id": "unit", "value": "short"},
+              {"id": "decimals", "value": 0}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "memory (MiB)"},
+            "properties": [
+              {"id": "unit", "value": "short"},
+              {"id": "decimals", "value": 0}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "throttled %"},
+            "properties": [
+              {"id": "unit", "value": "percent"},
+              {"id": "decimals", "value": 1},
+              {"id": "custom.cellOptions", "value": {"type": "color-background"}},
+              {"id": "thresholds", "value": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 5},
+                  {"color": "orange", "value": 20},
+                  {"color": "red", "value": 50}
+                ]
+              }}
+            ]
+          }
+        ]
+      },
+      "datasource": {"type": "prometheus", "uid": "prometheus"}
+    },
+    {
+      "type": "row",
+      "title": "Detail (filtered by $namespace + $pod)",
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 11},
+      "id": 101
+    },
+    {
+      "type": "timeseries",
+      "title": "CPU usage (mCPU)",
+      "description": "Solid = actual usage. Long dash = request. Short red dash = limit (cgroup throttle ceiling).",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 12},
+      "id": 5,
+      "targets": [
+        {
+          "expr": "rate(container_cpu_usage_seconds_total{namespace=~\"$namespace\",pod=~\"$pod\",container=\"app\"}[5m]) * 1000",
+          "legendFormat": "{{namespace}}/{{pod}} usage",
+          "refId": "A"
+        },
+        {
+          "expr": "kube_pod_container_resource_requests{namespace=~\"$namespace\",pod=~\"$pod\",container=\"app\",resource=\"cpu\"} * 1000",
+          "legendFormat": "{{namespace}}/{{pod}} request",
+          "refId": "B"
+        },
+        {
+          "expr": "kube_pod_container_resource_limits{namespace=~\"$namespace\",pod=~\"$pod\",container=\"app\",resource=\"cpu\"} * 1000",
+          "legendFormat": "{{namespace}}/{{pod}} limit",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {"drawStyle": "line", "lineWidth": 2, "fillOpacity": 10}
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byRegexp", "options": ".*request"},
+            "properties": [{"id": "custom.lineStyle", "value": {"fill": "dash", "dash": [10, 10]}}]
+          },
+          {
+            "matcher": {"id": "byRegexp", "options": ".*limit"},
+            "properties": [
+              {"id": "custom.lineStyle", "value": {"fill": "dash", "dash": [4, 4]}},
+              {"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}}
+            ]
+          }
+        ]
+      },
+      "datasource": {"type": "prometheus", "uid": "prometheus"}
+    },
+    {
+      "type": "timeseries",
+      "title": "CPU throttling — % of periods throttled",
+      "description": "Fraction of CFS scheduler periods where the container was throttled by limits.cpu. 0% = comfortable; 5-20% = under pressure; >50% = severe throttling (latency spikes, queueing). This is the signal that exposes 'soft failure' — pod is Ready but starving for CPU.",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 12},
+      "id": 6,
+      "targets": [{
+        "expr": "rate(container_cpu_cfs_throttled_periods_total{namespace=~\"$namespace\",pod=~\"$pod\",container=\"app\"}[5m]) / rate(container_cpu_cfs_periods_total{namespace=~\"$namespace\",pod=~\"$pod\",container=\"app\"}[5m]) * 100",
+        "legendFormat": "{{namespace}}/{{pod}}",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "max": 100,
+          "min": 0,
+          "custom": {"drawStyle": "line", "lineWidth": 2, "fillOpacity": 30, "gradientMode": "scheme"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"color": "green", "value": null},
+            {"color": "yellow", "value": 5},
+            {"color": "orange", "value": 20},
+            {"color": "red", "value": 50}
+          ]},
+          "color": {"mode": "thresholds"}
+        }
+      },
+      "datasource": {"type": "prometheus", "uid": "prometheus"}
+    },
+    {
+      "type": "timeseries",
+      "title": "Memory working set vs request/limit",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 20},
+      "id": 7,
+      "targets": [
+        {
+          "expr": "container_memory_working_set_bytes{namespace=~\"$namespace\",pod=~\"$pod\",container=\"app\"}",
+          "legendFormat": "{{namespace}}/{{pod}} working set",
+          "refId": "A"
+        },
+        {
+          "expr": "kube_pod_container_resource_requests{namespace=~\"$namespace\",pod=~\"$pod\",container=\"app\",resource=\"memory\"}",
+          "legendFormat": "{{namespace}}/{{pod}} request",
+          "refId": "B"
+        },
+        {
+          "expr": "kube_pod_container_resource_limits{namespace=~\"$namespace\",pod=~\"$pod\",container=\"app\",resource=\"memory\"}",
+          "legendFormat": "{{namespace}}/{{pod}} limit",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {"drawStyle": "line", "lineWidth": 2, "fillOpacity": 10}
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byRegexp", "options": ".*limit"},
+            "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}}]
+          }
+        ]
+      },
+      "datasource": {"type": "prometheus", "uid": "prometheus"}
+    },
+    {
+      "type": "timeseries",
+      "title": "Go heap inuse / alloc / stack",
+      "description": "heap_inuse - heap_alloc gap = fragmentation. stack_inuse correlates with goroutines.",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 20},
+      "id": 8,
+      "targets": [
+        {
+          "expr": "go_memstats_heap_inuse_bytes{namespace=~\"$namespace\",pod=~\"$pod\"}",
+          "legendFormat": "{{pod}} heap inuse",
+          "refId": "A"
+        },
+        {
+          "expr": "go_memstats_heap_alloc_bytes{namespace=~\"$namespace\",pod=~\"$pod\"}",
+          "legendFormat": "{{pod}} heap alloc",
+          "refId": "B"
+        },
+        {
+          "expr": "go_memstats_stack_inuse_bytes{namespace=~\"$namespace\",pod=~\"$pod\"}",
+          "legendFormat": "{{pod}} stack inuse",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {"drawStyle": "line", "lineWidth": 2, "fillOpacity": 10}
+        }
+      },
+      "datasource": {"type": "prometheus", "uid": "prometheus"}
+    },
+    {
+      "type": "timeseries",
+      "title": "Goroutines over time (leak detection)",
+      "description": "Healthy = flat or seasonal. Monotonically rising = leak candidate. Use delta(go_goroutines[24h]) > 0 in alerts.",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 28},
+      "id": 9,
+      "targets": [{
+        "expr": "go_goroutines{namespace=~\"$namespace\",pod=~\"$pod\"}",
+        "legendFormat": "{{namespace}}/{{pod}}",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {"drawStyle": "line", "lineWidth": 2, "fillOpacity": 10}
+        }
+      },
+      "datasource": {"type": "prometheus", "uid": "prometheus"}
+    },
+    {
+      "type": "timeseries",
+      "title": "GC pause p75 + max (ms)",
+      "description": "From go_gc_duration_seconds Summary. Available quantiles: 0, 0.25, 0.5, 0.75, 1.0 (no p99). p75 = where GC spends most of its time; max = worst recent pause. Yellow >10ms, red >50ms. If consistently high, lower GOGC or raise GOMEMLIMIT. Note: histogram form (go_gc_pauses_seconds_bucket) would give true p99 but isn't always exposed.",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 28},
+      "id": 10,
+      "targets": [
+        {
+          "expr": "go_gc_duration_seconds{namespace=~\"$namespace\",pod=~\"$pod\",quantile=\"0.75\"} * 1000",
+          "legendFormat": "{{namespace}}/{{pod}} p75",
+          "refId": "A"
+        },
+        {
+          "expr": "go_gc_duration_seconds{namespace=~\"$namespace\",pod=~\"$pod\",quantile=\"1.0\"} * 1000",
+          "legendFormat": "{{namespace}}/{{pod}} max",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {"drawStyle": "line", "lineWidth": 2, "fillOpacity": 10},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"color": "green", "value": null},
+            {"color": "yellow", "value": 10},
+            {"color": "red", "value": 50}
+          ]}
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byRegexp", "options": ".*max"},
+            "properties": [{"id": "custom.lineStyle", "value": {"fill": "dash", "dash": [4, 4]}}]
+          }
+        ]
+      },
+      "datasource": {"type": "prometheus", "uid": "prometheus"}
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["tuna", "kubernetes", "go"],
+  "templating": {
+    "list": [
+      {
+        "name": "namespace",
+        "label": "Namespace",
+        "type": "query",
+        "datasource": {"type": "prometheus", "uid": "prometheus"},
+        "query": {"query": "label_values(go_info, namespace)", "refId": "Prometheus-namespace-Variable-Query"},
+        "current": {"selected": true, "text": "All", "value": "$__all"},
+        "includeAll": true,
+        "multi": true,
+        "refresh": 2,
+        "regex": "",
+        "sort": 1
+      },
+      {
+        "name": "pod",
+        "label": "Pod",
+        "type": "query",
+        "datasource": {"type": "prometheus", "uid": "prometheus"},
+        "query": {"query": "label_values(go_info{namespace=~\"$namespace\"}, pod)", "refId": "Prometheus-pod-Variable-Query"},
+        "current": {"selected": true, "text": "All", "value": "$__all"},
+        "includeAll": true,
+        "multi": true,
+        "refresh": 2,
+        "regex": "",
+        "sort": 1
+      }
+    ]
+  },
+  "time": {"from": "now-1h", "to": "now"},
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "tuna — Go workload right-sizing",
+  "uid": "tuna-main",
+  "version": 2,
+  "weekStart": ""
+}

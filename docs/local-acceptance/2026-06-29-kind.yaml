@@ -1,0 +1,85 @@
+apiVersion: tuna.siabroo.github.io/v1alpha1
+kind: WorkloadRecommendation
+metadata:
+  creationTimestamp: "2026-06-29T17:47:38Z"
+  generation: 1
+  name: sample-go-app
+  namespace: default
+  ownerReferences:
+  - apiVersion: apps/v1
+    blockOwnerDeletion: false
+    controller: true
+    kind: Deployment
+    name: sample-go-app
+    uid: 6c424de2-d7af-4015-95f6-3137456a6f59
+  resourceVersion: "2963"
+  uid: 35b9d03e-2870-4fa6-b5bb-16e8b059036d
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: sample-go-app
+    namespace: default
+    uid: 6c424de2-d7af-4015-95f6-3137456a6f59
+status:
+  conditions:
+  - lastTransitionTime: "2026-06-29T18:04:18Z"
+    message: analyzer go matched
+    reason: Detected
+    status: "True"
+    type: WorkloadDetected
+  - lastTransitionTime: "2026-06-29T18:04:18Z"
+    message: analysis completed
+    reason: AnalysisFresh
+    status: "True"
+    type: Ready
+  - lastTransitionTime: "2026-06-29T18:04:18Z"
+    message: PromQL endpoint reachable
+    reason: PrometheusReachable
+    status: "True"
+    type: MetricsAvailable
+  - lastTransitionTime: "2026-06-29T18:04:18Z"
+    message: '>=50% of 24h0m0s window covered'
+    reason: SamplesAdequate
+    status: "True"
+    type: DataSufficient
+  current:
+    env:
+      GODEBUG: ""
+      GOGC: ""
+      GOMAXPROCS: ""
+      GOMEMLIMIT: ""
+    resources:
+      limits:
+        cpu: 100m
+        memory: 64Mi
+      requests:
+        cpu: 50m
+        memory: 32Mi
+  lastAnalyzedAt: "2026-06-29T18:04:18Z"
+  observed:
+    memory:
+      workingSetP95Bytes: 9042329
+      workingSetP99Bytes: 9076408
+    window: 24h
+  recommendationCount: 3
+  recommendations:
+  - current: 32Mi
+    field: resources.requests.memory
+    rationale: p95 memory working set 9Mi exceeds requests 32Mi.
+    recommended: 9Mi
+    severity: warning
+  - current: 64Mi
+    field: resources.limits.memory
+    rationale: p99 memory working set 9Mi needs 20% headroom; current limit 64Mi is
+      below it.
+    recommended: 10Mi
+    severity: warning
+  - current: (unset)
+    field: env.GOMEMLIMIT
+    rationale: GC pacing improves when GOMEMLIMIT ≈ 0.9 × container memory limit (57MiB
+      here).
+    recommended: 57MiB
+    severity: warning
+  workload:
+    type: go
