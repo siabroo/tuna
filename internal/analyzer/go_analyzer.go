@@ -86,7 +86,7 @@ func (g GoAnalyzer) gomaxprocsRec(cur CurrentSettings) *Recommendation {
 	case autoBuiltIn && optedOut:
 		return &Recommendation{
 			Field:       "env.GOMAXPROCS",
-			Current:     "(unset)",
+			Current:     currentOrUnset(current),
 			Recommended: recommended,
 			Rationale:   "GODEBUG=containermaxprocs=0 opts out of Go 1.25+ automatic GOMAXPROCS; either remove the opt-out or set GOMAXPROCS explicitly to ceil(cpu limit).",
 			Severity:    SeverityWarning,
@@ -102,13 +102,20 @@ func (g GoAnalyzer) gomaxprocsRec(cur CurrentSettings) *Recommendation {
 	case !autoBuiltIn && current == "":
 		return &Recommendation{
 			Field:       "env.GOMAXPROCS",
-			Current:     "(unset)",
+			Current:     currentOrUnset(current),
 			Recommended: recommended,
 			Rationale:   "Go < 1.25 runtime sees host CPU count and will oversubscribe under cpu limit; set GOMAXPROCS or import go.uber.org/automaxprocs.",
 			Severity:    SeverityWarning,
 		}
 	}
 	return nil
+}
+
+func currentOrUnset(v string) string {
+	if v == "" {
+		return "(unset)"
+	}
+	return v
 }
 
 func (g GoAnalyzer) gomemlimitRec(cur CurrentSettings) *Recommendation {
@@ -255,20 +262,16 @@ func (g GoAnalyzer) resourceRecs(obs ObservedMetrics, cur CurrentSettings, tol f
 		}
 	}
 
-	// limits.memory — target p99 * 1.20. Memory limits are safety-critical
-	// (OOM kills), so suppression is intentionally not applied here; emit
-	// a rec whenever current doesn't match the formula.
+	// limits.memory — target p99 * 1.20.
 	if obs.MemoryWorkingSetP99Bytes > 0 {
 		curMemLim := readBytes(cur.Resources.Limits, corev1.ResourceMemory)
 		want := int64(float64(obs.MemoryWorkingSetP99Bytes) * 1.20)
-		wantMiB := formatMiB(want)
-		curMiB := formatMiB(curMemLim)
-		if curMiB != wantMiB {
+		if !SuppressIfClose(float64(curMemLim), float64(want), tol) {
 			out = append(out, Recommendation{
 				Field:       "resources.limits.memory",
-				Current:     curMiB,
-				Recommended: wantMiB,
-				Rationale:   fmt.Sprintf("p99 memory working set %s needs 20%% headroom; current limit %s is close.", formatMiB(obs.MemoryWorkingSetP99Bytes), curMiB),
+				Current:     formatMiB(curMemLim),
+				Recommended: formatMiB(want),
+				Rationale:   fmt.Sprintf("p99 memory working set %s needs 20%% headroom; current limit %s is below it.", formatMiB(obs.MemoryWorkingSetP99Bytes), formatMiB(curMemLim)),
 				Severity:    SeverityWarning,
 			})
 		}

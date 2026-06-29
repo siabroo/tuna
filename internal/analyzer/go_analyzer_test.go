@@ -52,7 +52,7 @@ func TestGoAnalyzer_Resources(t *testing.T) {
 			name: "requests.memory bumped when p95 working-set > current",
 			observed: ObservedMetrics{
 				MemoryWorkingSetP95Bytes: 398_458_880, // 380Mi
-				MemoryWorkingSetP99Bytes: 440_401_920, // 420Mi
+				MemoryWorkingSetP99Bytes: 503_316_480, // 480Mi  ← 12.5% delta vs 512Mi, NOT suppressed
 			},
 			current: CurrentSettings{
 				Resources: corev1.ResourceRequirements{
@@ -75,8 +75,8 @@ func TestGoAnalyzer_Resources(t *testing.T) {
 				{
 					Field:       "resources.limits.memory",
 					Current:     "512Mi",
-					Recommended: "504Mi", // 420 * 1.20 = 504
-					Rationale:   "p99 memory working set 420Mi needs 20% headroom; current limit 512Mi is close.",
+					Recommended: "576Mi", // 480 * 1.20 = 576
+					Rationale:   "p99 memory working set 480Mi needs 20% headroom; current limit 512Mi is below it.",
 					Severity:    SeverityWarning,
 				},
 			},
@@ -147,11 +147,12 @@ func startsWith(s, p string) bool {
 
 func TestGoAnalyzer_GOMAXPROCS(t *testing.T) {
 	tests := []struct {
-		name    string
-		current CurrentSettings
-		wantRec bool
-		wantVal string
-		wantSev string
+		name        string
+		current     CurrentSettings
+		wantRec     bool
+		wantVal     string
+		wantSev     string
+		wantCurrent string
 	}{
 		{
 			name: "Go < 1.25 + cpu limit + GOMAXPROCS unset → warn",
@@ -203,9 +204,27 @@ func TestGoAnalyzer_GOMAXPROCS(t *testing.T) {
 				},
 				GoVersion: "1.26.0",
 			},
-			wantRec: true,
-			wantVal: "1",
-			wantSev: SeverityInfo,
+			wantRec:     true,
+			wantVal:     "1",
+			wantSev:     SeverityInfo,
+			wantCurrent: "4",
+		},
+		{
+			name: "Go >= 1.25 + GODEBUG opt-out + GOMAXPROCS already set → Current reflects the set value",
+			current: CurrentSettings{
+				Resources: corev1.ResourceRequirements{Limits: corev1.ResourceList{
+					corev1.ResourceCPU: resource.MustParse("500m"),
+				}},
+				Env: map[string]string{
+					"GODEBUG":    "containermaxprocs=0",
+					"GOMAXPROCS": "4",
+				},
+				GoVersion: "1.26.0",
+			},
+			wantRec:     true,
+			wantVal:     "1",
+			wantSev:     SeverityWarning,
+			wantCurrent: "4",
 		},
 		{
 			name: "no cpu limit → no rec (nothing to base it on)",
@@ -232,6 +251,9 @@ func TestGoAnalyzer_GOMAXPROCS(t *testing.T) {
 			}
 			if rec.Severity != tc.wantSev {
 				t.Errorf("Severity = %q, want %q", rec.Severity, tc.wantSev)
+			}
+			if tc.wantCurrent != "" && rec.Current != tc.wantCurrent {
+				t.Errorf("Current = %q, want %q", rec.Current, tc.wantCurrent)
 			}
 		})
 	}
