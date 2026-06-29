@@ -12,7 +12,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	ctrlconfig "sigs.k8s.io/controller-runtime/pkg/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
@@ -72,8 +71,10 @@ func TestDiscovery_CreatesCROnAnnotation(t *testing.T) {
 		Name:       "backend",
 		Namespace:  "default",
 	}
-	if diff := cmp.Diff(wantTarget.Name, cr.Spec.TargetRef.Name); diff != "" {
-		t.Errorf("targetRef.Name mismatch (-want +got):\n%s", diff)
+	got := cr.Spec.TargetRef
+	got.UID = "" // UID is env-assigned; exclude from structural check
+	if diff := cmp.Diff(wantTarget, got); diff != "" {
+		t.Errorf("targetRef mismatch (-want +got):\n%s", diff)
 	}
 
 	// ownerReference: controller=true, blockOwnerDeletion=false
@@ -91,9 +92,6 @@ func TestDiscovery_CreatesCROnAnnotation(t *testing.T) {
 		t.Error("ownerRef.BlockOwnerDeletion should be false (spec P1.2)")
 	}
 
-	// Silence unused
-	_ = errors.IsNotFound
-	_ = client.IgnoreNotFound
 }
 
 // pollUntil retries fn every 100ms until it returns true or timeout hits.
