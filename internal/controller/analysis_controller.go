@@ -118,11 +118,15 @@ func (r *AnalysisReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	pods, err := selector.ResolvePods(ctx, r.Client, dep)
 	if err != nil {
 		SetCondition(&cr.Status.Conditions, ConditionReady, metav1.ConditionFalse, "PodListFailed", err.Error())
+		markConditionsUnknown(&cr.Status.Conditions, "PodListFailed", "cannot verify metrics/workload while pod list failed",
+			ConditionMetricsAvailable, ConditionWorkloadDetected, ConditionDataSufficient)
 		return r.patchStatus(ctx, cr, ctrl.Result{RequeueAfter: 1 * time.Minute})
 	}
 	if len(pods) == 0 {
 		SetCondition(&cr.Status.Conditions, ConditionDataSufficient, metav1.ConditionFalse, "NoRunningPods", "deployment has zero pods")
 		SetCondition(&cr.Status.Conditions, ConditionReady, metav1.ConditionFalse, "NoRunningPods", "deployment has zero pods")
+		markConditionsUnknown(&cr.Status.Conditions, "NoRunningPods", "no pods running",
+			ConditionMetricsAvailable, ConditionWorkloadDetected)
 		return r.patchStatus(ctx, cr, ctrl.Result{RequeueAfter: 5 * time.Minute})
 	}
 	podRegex := selector.PodRegex(pods)
@@ -132,6 +136,8 @@ func (r *AnalysisReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	if err != nil {
 		SetCondition(&cr.Status.Conditions, ConditionMetricsAvailable, metav1.ConditionFalse, "PrometheusUnreachable", err.Error())
 		SetCondition(&cr.Status.Conditions, ConditionReady, metav1.ConditionFalse, "PrometheusUnreachable", err.Error())
+		markConditionsUnknown(&cr.Status.Conditions, "PrometheusUnreachable", "cannot verify while Prometheus is unreachable",
+			ConditionWorkloadDetected, ConditionDataSufficient)
 		if r.Recorder != nil {
 			r.Recorder.Event(dep, "Warning", "MetricsUnavailable",
 				fmt.Sprintf("Failed to query Prometheus: %v", err))
@@ -155,6 +161,12 @@ func (r *AnalysisReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	if err != nil {
 		SetCondition(&cr.Status.Conditions, ConditionReady, metav1.ConditionFalse, "ExtractFailed", err.Error())
 		return r.patchStatus(ctx, cr, ctrl.Result{RequeueAfter: 5 * time.Minute})
+	}
+
+	// Best-effort: extract Go version from the go_info series' "version" label.
+	// If extraction fails, GoVersion stays empty and the analyzer treats as unknown.
+	if version, _, err := r.Prom.QueryFirstLabel(ctx, prom.QueryGoVersion(dep.Namespace, podRegex), "version"); err == nil {
+		cur.GoVersion = version
 	}
 
 	// Query metrics serially.
@@ -233,6 +245,14 @@ func (r *AnalysisReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 
 	SetCondition(&cr.Status.Conditions, ConditionReady, metav1.ConditionTrue, "AnalysisFresh", "analysis completed")
 	return r.patchStatus(ctx, cr, ctrl.Result{RequeueAfter: r.AnalysisInterval})
+}
+
+// markConditionsUnknown sets the listed conditions to Unknown with the given
+// reason, ensuring no prior-success conditions linger on a partial failure.
+func markConditionsUnknown(conds *[]metav1.Condition, reason, message string, types ...string) {
+	for _, t := range types {
+		SetCondition(conds, t, metav1.ConditionUnknown, reason, message)
+	}
 }
 
 // patchStatus writes cr.Status back to the cluster, then returns the

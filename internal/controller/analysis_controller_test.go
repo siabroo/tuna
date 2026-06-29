@@ -93,10 +93,12 @@ func TestAnalysis_WritesStatusWithRecommendations(t *testing.T) {
 		switch {
 		case containsAll(query, "count(go_info"):
 			return testenv.PromResult{Value: 1.0}
+		case containsAll(query, "container_cpu_usage_seconds_total", "0.50"):
+			return testenv.PromResult{Value: 120.0} // p50 = 120m
 		case containsAll(query, "container_cpu_usage_seconds_total", "0.95"):
-			return testenv.PromResult{Value: 0.34} // 340m in cores → * 1000 = 340m
+			return testenv.PromResult{Value: 340.0} // p95 = 340m
 		case containsAll(query, "container_cpu_usage_seconds_total", "0.99"):
-			return testenv.PromResult{Value: 0.51}
+			return testenv.PromResult{Value: 510.0} // p99 = 510m
 		case containsAll(query, "container_memory_working_set_bytes", "0.95"):
 			return testenv.PromResult{Value: 398458880}
 		default:
@@ -160,6 +162,18 @@ func TestAnalysis_WritesStatusWithRecommendations(t *testing.T) {
 	}
 	if !hasConditionTrue(cr.Status.Conditions, controller.ConditionReady) {
 		t.Errorf("Ready condition not True; got: %+v", cr.Status.Conditions)
+	}
+
+	// At least one recommendation must be for CPU requests (non-zero mock values ensure non-zero obs).
+	hasCPURec := false
+	for _, rec := range cr.Status.Recommendations {
+		if rec.Field == "resources.requests.cpu" {
+			hasCPURec = true
+			break
+		}
+	}
+	if !hasCPURec {
+		t.Errorf("no recommendation with Field=resources.requests.cpu; got recs: %+v", cr.Status.Recommendations)
 	}
 }
 

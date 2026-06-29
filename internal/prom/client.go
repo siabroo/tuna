@@ -105,3 +105,54 @@ func (c *Client) Query(ctx context.Context, q string) (float64, bool, error) {
 	}
 	return v, false, nil
 }
+
+// QueryFirstLabel runs the query and returns the value of the named
+// label on the first result series. Returns ("", true, nil) when
+// the query succeeded but returned zero series. Returns
+// ("", false, err) on any other error.
+func (c *Client) QueryFirstLabel(ctx context.Context, query, labelName string) (string, bool, error) {
+	u := c.baseURL + "/api/v1/query"
+	form := url.Values{"query": {query}}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, strings.NewReader(form.Encode()))
+	if err != nil {
+		return "", false, err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return "", false, fmt.Errorf("prom query http: %w", err)
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", false, fmt.Errorf("prom read body: %w", err)
+	}
+	if resp.StatusCode >= 400 && resp.StatusCode != 422 {
+		return "", false, fmt.Errorf("prom http %d: %s", resp.StatusCode, string(body))
+	}
+	var parsed struct {
+		Status string `json:"status"`
+		Error  string `json:"error"`
+		Data   struct {
+			Result []map[string]any `json:"result"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		return "", false, fmt.Errorf("prom decode: %w", err)
+	}
+	if parsed.Status != "success" {
+		return "", false, fmt.Errorf("prom: %s", parsed.Error)
+	}
+	if len(parsed.Data.Result) == 0 {
+		return "", true, nil
+	}
+	metric, ok := parsed.Data.Result[0]["metric"].(map[string]any)
+	if !ok {
+		return "", false, nil
+	}
+	val, ok := metric[labelName].(string)
+	if !ok {
+		return "", false, nil
+	}
+	return val, false, nil
+}
