@@ -2,6 +2,7 @@ package controller_test
 
 import (
 	"context"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -9,12 +10,15 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	tunav1alpha1 "github.com/siabroo/tuna/api/v1alpha1"
+	"github.com/siabroo/tuna/internal/analyzer"
 	"github.com/siabroo/tuna/internal/controller"
+	"github.com/siabroo/tuna/internal/prom"
 	"github.com/siabroo/tuna/internal/testenv"
 )
 
@@ -78,4 +82,101 @@ func TestAnalysis_ReconciledOnDeploymentChange(t *testing.T) {
 		t.Fatalf("Deployment change did not trigger reconcile: %v", err)
 	}
 
+}
+
+func TestAnalysis_WritesStatusWithRecommendations(t *testing.T) {
+	env := testenv.Start(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	mock := testenv.StartPromMock(t, func(query string) testenv.PromResult {
+		switch {
+		case containsAll(query, "count(go_info"):
+			return testenv.PromResult{Value: 1.0}
+		case containsAll(query, "container_cpu_usage_seconds_total", "0.95"):
+			return testenv.PromResult{Value: 0.34} // 340m in cores → * 1000 = 340m
+		case containsAll(query, "container_cpu_usage_seconds_total", "0.99"):
+			return testenv.PromResult{Value: 0.51}
+		case containsAll(query, "container_memory_working_set_bytes", "0.95"):
+			return testenv.PromResult{Value: 398458880}
+		default:
+			return testenv.PromResult{Empty: true}
+		}
+	})
+
+	pClient, _ := prom.NewClient(mock.URL, prom.AuthNone)
+
+	mgr := startManagerWith(t, env, func(m manager.Manager) error {
+		if err := controller.AddDiscoveryController(m); err != nil {
+			return err
+		}
+		return controller.AddAnalysisController(m, pClient,
+			[]analyzer.Analyzer{analyzer.GoAnalyzer{}},
+			5*time.Second,
+		)
+	})
+	go func() { _ = mgr.Start(ctx) }()
+
+	dep := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "svc", Namespace: "default",
+			Annotations: map[string]string{controller.AnalyzeAnnotation: "true"},
+		},
+		Spec: appsv1.DeploymentSpec{
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "svc"}},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "svc"}},
+				Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "app", Image: "x"}}},
+			},
+		},
+	}
+	if err := env.Client.Create(ctx, dep); err != nil {
+		t.Fatalf("create dep: %v", err)
+	}
+	// Need a pod for ResolvePods.
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "svc-0", Namespace: "default", Labels: map[string]string{"app": "svc"}},
+		Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "app", Image: "x"}}},
+	}
+	if err := env.Client.Create(ctx, pod); err != nil {
+		t.Fatalf("create pod: %v", err)
+	}
+
+	if err := pollUntil(ctx, 30*time.Second, func() bool {
+		cr := &tunav1alpha1.WorkloadRecommendation{}
+		if err := env.Client.Get(ctx, types.NamespacedName{Name: "svc", Namespace: "default"}, cr); err != nil {
+			return false
+		}
+		return len(cr.Status.Recommendations) > 0
+	}); err != nil {
+		t.Fatalf("no recommendations written within 30s: %v", err)
+	}
+
+	cr := &tunav1alpha1.WorkloadRecommendation{}
+	_ = env.Client.Get(ctx, types.NamespacedName{Name: "svc", Namespace: "default"}, cr)
+
+	if cr.Status.Workload == nil || cr.Status.Workload.Type != "go" {
+		t.Errorf("Workload.Type = %v, want go", cr.Status.Workload)
+	}
+	if !hasConditionTrue(cr.Status.Conditions, controller.ConditionReady) {
+		t.Errorf("Ready condition not True; got: %+v", cr.Status.Conditions)
+	}
+}
+
+func containsAll(s string, parts ...string) bool {
+	for _, p := range parts {
+		if !strings.Contains(s, p) {
+			return false
+		}
+	}
+	return true
+}
+
+func hasConditionTrue(conds []metav1.Condition, condType string) bool {
+	for _, c := range conds {
+		if c.Type == condType && c.Status == metav1.ConditionTrue {
+			return true
+		}
+	}
+	return false
 }
