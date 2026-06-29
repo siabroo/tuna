@@ -1,0 +1,42 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: tuna-manager
+rules:
+  # Deployments — read-only, cluster-wide
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch"]
+
+  # Pods — read-only, cluster-wide (k8s-api selector mode)
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+
+  # Our own CRD — full control, cluster-wide
+  - apiGroups: ["tuna.siabroo.github.io"]
+    resources: ["workloadrecommendations"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+
+  - apiGroups: ["tuna.siabroo.github.io"]
+    resources: ["workloadrecommendations/status"]
+    verbs: ["get", "patch", "update"]
+
+  - apiGroups: ["tuna.siabroo.github.io"]
+    resources: ["workloadrecommendations/finalizers"]
+    verbs: ["update"]
+
+  # Events — cluster-wide (operator emits Events on Deployments in any namespace)
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+  - apiGroups: ["events.k8s.io"]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+
+  # Leader election — in operator's own namespace only
+  # Note: ClusterRole keeps this simple for iter 1; for strict scoping,
+  # move Lease rules to a separate Role + RoleBinding under config/manager/lease_rbac.yaml.
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
