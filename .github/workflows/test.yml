@@ -1,0 +1,28 @@
+name: test
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache: true
+      - name: Cache envtest assets
+        uses: actions/cache@v4
+        with:
+          path: testbin
+          key: envtest-${{ runner.os }}-1.30.0
+      - name: Install envtest binaries
+        run: make envtest
+      - name: Generate (deepcopy + manifests)
+        run: make generate manifests
+      - name: Unit + envtest
+        run: make test
+      - name: Build
+        run: make build
