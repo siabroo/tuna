@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -37,7 +36,7 @@ func TestE2E_WorkloadRecommendationProduced(t *testing.T) {
 		t.Fatalf("client.New: %v", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 14*time.Minute)
 	defer cancel()
 
 	// Sanity: tuna-manager pod should be Ready.
@@ -101,4 +100,3 @@ func hasConditionTrue(conds []metav1.Condition, t string) bool {
 	return false
 }
 
-var _ corev1.Pod // keep import

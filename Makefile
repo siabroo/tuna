@@ -83,7 +83,7 @@ e2e-up: ## Spin up kind + kube-prom-stack + tuna + sample-go-app
 		--set grafana.enabled=false --wait
 	$(MAKE) docker-build IMG=tuna:e2e
 	kind load docker-image tuna:e2e --name $(KIND_CLUSTER)
-	cd test/samples/sample-go-app && docker build -t sample-go-app:dev . && cd ../../..
+	cd test/samples/sample-go-app && docker build -t sample-go-app:dev .
 	kind load docker-image sample-go-app:dev --name $(KIND_CLUSTER)
 	$(MAKE) deploy IMG=tuna:e2e
 	kubectl apply -f test/samples/sample-go-app/service.yaml
