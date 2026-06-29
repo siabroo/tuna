@@ -9,7 +9,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -79,5 +78,4 @@ func TestAnalysis_ReconciledOnDeploymentChange(t *testing.T) {
 		t.Fatalf("Deployment change did not trigger reconcile: %v", err)
 	}
 
-	_ = types.NamespacedName{}
 }

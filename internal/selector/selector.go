@@ -73,8 +73,8 @@ func DetectWorkload(
 	analyzers []analyzer.Analyzer,
 	namespace, podRegex string,
 ) (analyzer.Analyzer, error) {
+	labelClause := fmt.Sprintf(`namespace=%q,pod=~%q`, namespace, podRegex)
 	for _, a := range analyzers {
-		labelClause := fmt.Sprintf(`namespace=%q,pod=~%q`, namespace, podRegex)
 		q := fmt.Sprintf(a.DetectionProbe(), labelClause)
 		v, empty, err := p.Query(ctx, q)
 		if err != nil {

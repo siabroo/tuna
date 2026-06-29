@@ -67,6 +67,7 @@ func deploymentToCR(c client.Client) handler.MapFunc {
 			if errors.IsNotFound(err) {
 				return nil
 			}
+			ctrl.Log.Error(err, "deploymentToCR: failed to fetch WorkloadRecommendation", "key", key)
 			return nil
 		}
 		return []reconcile.Request{{NamespacedName: key}}

@@ -58,7 +58,10 @@ func PickContainer(dep *appsv1.Deployment) (string, error) {
 	if len(candidates) == 1 {
 		return candidates[0], nil
 	}
-	return "", fmt.Errorf("ambiguous: multiple non-sidecar containers (%v); add annotation %s=<name>", candidates, ContainerAnnotation)
+	if len(candidates) == 0 {
+		return "", fmt.Errorf("all containers are known sidecars; add annotation %s=<name> to force one", ContainerAnnotation)
+	}
+	return "", fmt.Errorf("ambiguous: %d non-sidecar containers (%v); add annotation %s=<name>", len(candidates), candidates, ContainerAnnotation)
 }
 
 // envVarsOfInterest determines which env vars get copied into
