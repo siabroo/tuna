@@ -49,6 +49,11 @@ type WorkloadRecommendationStatus struct {
 	// Recommendations produced by the analyzer.
 	// +optional
 	Recommendations []Recommendation `json:"recommendations,omitempty"`
+
+	// RecommendationCount mirrors len(Recommendations) for use as a
+	// printer column. The controller maintains this when patching status.
+	// +optional
+	RecommendationCount int `json:"recommendationCount,omitempty"`
 }
 
 // WorkloadInfo identifies the runtime detected on the target.
@@ -131,7 +136,7 @@ type Recommendation struct {
 // +kubebuilder:resource:scope=Namespaced,shortName=wr;workreco
 // +kubebuilder:printcolumn:name="Workload",type=string,JSONPath=`.status.workload.type`
 // +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].status`
-// +kubebuilder:printcolumn:name="Recs",type=integer,JSONPath=`.status.recommendations[*]`
+// +kubebuilder:printcolumn:name="Recs",type=integer,JSONPath=`.status.recommendationCount`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 type WorkloadRecommendation struct {
 	metav1.TypeMeta   `json:",inline"`

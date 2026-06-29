@@ -24,7 +24,7 @@ spec:
     - jsonPath: .status.conditions[?(@.type=="Ready")].status
       name: Ready
       type: string
-    - jsonPath: .status.recommendations[*]
+    - jsonPath: .status.recommendationCount
       name: Recs
       type: integer
     - jsonPath: .metadata.creationTimestamp
@@ -304,6 +304,11 @@ spec:
                 description: ObservedGeneration reflects the spec.targetRef generation
                   last analyzed.
                 format: int64
+                type: integer
+              recommendationCount:
+                description: |-
+                  RecommendationCount mirrors len(Recommendations) for use as a
+                  printer column. The controller maintains this when patching status.
                 type: integer
               recommendations:
                 description: Recommendations produced by the analyzer.

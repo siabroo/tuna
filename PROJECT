@@ -8,7 +8,7 @@ repo: github.com/siabroo/tuna
 resources:
 - api:
     crdVersion: v1
-    namespaced: false
+    namespaced: true
   controller: true
   domain: siabroo.github.io
   group: tuna
