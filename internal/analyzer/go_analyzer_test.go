@@ -144,3 +144,156 @@ func startsWith(s, p string) bool {
 	}
 	return s[:len(p)] == p
 }
+
+func TestGoAnalyzer_GOMAXPROCS(t *testing.T) {
+	tests := []struct {
+		name    string
+		current CurrentSettings
+		wantRec bool
+		wantVal string
+		wantSev string
+	}{
+		{
+			name: "Go < 1.25 + cpu limit + GOMAXPROCS unset → warn",
+			current: CurrentSettings{
+				Resources: corev1.ResourceRequirements{Limits: corev1.ResourceList{
+					corev1.ResourceCPU: resource.MustParse("500m"),
+				}},
+				Env:       map[string]string{},
+				GoVersion: "1.23.4",
+			},
+			wantRec: true,
+			wantVal: "1",
+			wantSev: SeverityWarning,
+		},
+		{
+			name: "Go >= 1.25 + cpu limit + GOMAXPROCS unset → no rec (Go reads cgroup)",
+			current: CurrentSettings{
+				Resources: corev1.ResourceRequirements{Limits: corev1.ResourceList{
+					corev1.ResourceCPU: resource.MustParse("500m"),
+				}},
+				Env:       map[string]string{},
+				GoVersion: "1.26.0",
+			},
+			wantRec: false,
+		},
+		{
+			name: "Go >= 1.25 + GODEBUG=containermaxprocs=0 (opted out) → warn",
+			current: CurrentSettings{
+				Resources: corev1.ResourceRequirements{Limits: corev1.ResourceList{
+					corev1.ResourceCPU: resource.MustParse("500m"),
+				}},
+				Env: map[string]string{
+					"GODEBUG": "containermaxprocs=0",
+				},
+				GoVersion: "1.26.0",
+			},
+			wantRec: true,
+			wantVal: "1",
+			wantSev: SeverityWarning,
+		},
+		{
+			name: "Go >= 1.25 + GOMAXPROCS set wrong → info",
+			current: CurrentSettings{
+				Resources: corev1.ResourceRequirements{Limits: corev1.ResourceList{
+					corev1.ResourceCPU: resource.MustParse("500m"),
+				}},
+				Env: map[string]string{
+					"GOMAXPROCS": "4",
+				},
+				GoVersion: "1.26.0",
+			},
+			wantRec: true,
+			wantVal: "1",
+			wantSev: SeverityInfo,
+		},
+		{
+			name: "no cpu limit → no rec (nothing to base it on)",
+			current: CurrentSettings{
+				Resources: corev1.ResourceRequirements{},
+				Env:       map[string]string{},
+				GoVersion: "1.26.0",
+			},
+			wantRec: false,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := GoAnalyzer{}.Analyze(ObservedMetrics{}, tc.current)
+			rec := findRec(got, "env.GOMAXPROCS")
+			if (rec != nil) != tc.wantRec {
+				t.Fatalf("rec present = %v, want %v (got: %+v)", rec != nil, tc.wantRec, got)
+			}
+			if !tc.wantRec {
+				return
+			}
+			if rec.Recommended != tc.wantVal {
+				t.Errorf("Recommended = %q, want %q", rec.Recommended, tc.wantVal)
+			}
+			if rec.Severity != tc.wantSev {
+				t.Errorf("Severity = %q, want %q", rec.Severity, tc.wantSev)
+			}
+		})
+	}
+}
+
+func TestGoAnalyzer_GOMEMLIMIT(t *testing.T) {
+	cur := CurrentSettings{
+		Resources: corev1.ResourceRequirements{
+			Limits: corev1.ResourceList{
+				corev1.ResourceMemory: resource.MustParse("512Mi"),
+			},
+		},
+		Env:       map[string]string{},
+		GoVersion: "1.26.0",
+	}
+	got := GoAnalyzer{}.Analyze(ObservedMetrics{}, cur)
+	rec := findRec(got, "env.GOMEMLIMIT")
+	if rec == nil {
+		t.Fatalf("no env.GOMEMLIMIT rec; got: %+v", got)
+	}
+	want := "460MiB" // 0.9 * 512Mi ≈ 460.8 → 460Mi
+	if rec.Recommended != want {
+		t.Errorf("Recommended = %q, want %q", rec.Recommended, want)
+	}
+	if rec.Severity != SeverityWarning {
+		t.Errorf("Severity = %q, want warning", rec.Severity)
+	}
+}
+
+func TestGoAnalyzer_GOGC_silentWhenGCFine(t *testing.T) {
+	cur := CurrentSettings{
+		Env:       map[string]string{},
+		GoVersion: "1.26.0",
+	}
+	obs := ObservedMetrics{GCPauseP99Ms: 2.0}
+	got := GoAnalyzer{}.Analyze(obs, cur)
+	if findRec(got, "env.GOGC") != nil {
+		t.Error("expected no GOGC rec when GC pauses are low; got one")
+	}
+}
+
+func TestGoAnalyzer_GOGC_suggestWhenGCStressed(t *testing.T) {
+	cur := CurrentSettings{
+		Env:       map[string]string{},
+		GoVersion: "1.26.0",
+	}
+	obs := ObservedMetrics{GCPauseP99Ms: 75.0}
+	got := GoAnalyzer{}.Analyze(obs, cur)
+	rec := findRec(got, "env.GOGC")
+	if rec == nil {
+		t.Fatalf("expected GOGC rec when GC pauses are high; got none")
+	}
+	if rec.Severity != SeverityInfo {
+		t.Errorf("Severity = %q, want info", rec.Severity)
+	}
+}
+
+func findRec(recs []Recommendation, field string) *Recommendation {
+	for i := range recs {
+		if recs[i].Field == field {
+			return &recs[i]
+		}
+	}
+	return nil
+}

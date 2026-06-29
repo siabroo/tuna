@@ -32,8 +32,169 @@ func (g GoAnalyzer) Analyze(obs ObservedMetrics, cur CurrentSettings) []Recommen
 	}
 	var recs []Recommendation
 	recs = append(recs, g.resourceRecs(obs, cur, tol)...)
-	// env recs added in Task 8
+	recs = append(recs, g.envRecs(obs, cur)...)
 	return recs
+}
+
+// gomaxprocsAutoSince is the first Go version with automatic cgroup-aware
+// GOMAXPROCS behavior. See https://go.dev/doc/go1.25.
+const gomaxprocsAutoSince = "1.25"
+
+// envRecs produces GOMAXPROCS / GOMEMLIMIT / GOGC recommendations.
+func (g GoAnalyzer) envRecs(obs ObservedMetrics, cur CurrentSettings) []Recommendation {
+	var out []Recommendation
+
+	// GOMAXPROCS
+	if r := g.gomaxprocsRec(cur); r != nil {
+		out = append(out, *r)
+	}
+	// GOMEMLIMIT
+	if r := g.gomemlimitRec(cur); r != nil {
+		out = append(out, *r)
+	}
+	// GOGC — only suggest if GC pause is unusually high.
+	if obs.GCPauseP99Ms > 50.0 && cur.Env["GOGC"] == "" {
+		out = append(out, Recommendation{
+			Field:       "env.GOGC",
+			Current:     "(unset)",
+			Recommended: "75",
+			Rationale:   fmt.Sprintf("p99 GC pause %.1fms is high; consider lowering GOGC (default 100) to trade memory for shorter pauses.", obs.GCPauseP99Ms),
+			Severity:    SeverityInfo,
+		})
+	}
+	return out
+}
+
+func (g GoAnalyzer) gomaxprocsRec(cur CurrentSettings) *Recommendation {
+	cpuLim := readMillicores(cur.Resources.Limits, corev1.ResourceCPU)
+	if cpuLim == 0 {
+		return nil
+	}
+	ceilCores := int64(math.Ceil(float64(cpuLim) / 1000.0))
+	if ceilCores < 1 {
+		ceilCores = 1
+	}
+	recommended := fmt.Sprintf("%d", ceilCores)
+	current := cur.Env["GOMAXPROCS"]
+	autoBuiltIn := goVersionAtLeast(cur.GoVersion, gomaxprocsAutoSince)
+	optedOut := containsGODEBUGOpt(cur.Env["GODEBUG"], "containermaxprocs=0")
+
+	switch {
+	case autoBuiltIn && !optedOut && current == "":
+		// Go 1.25+ handles it. Nothing to recommend.
+		return nil
+	case autoBuiltIn && optedOut:
+		return &Recommendation{
+			Field:       "env.GOMAXPROCS",
+			Current:     "(unset)",
+			Recommended: recommended,
+			Rationale:   "GODEBUG=containermaxprocs=0 opts out of Go 1.25+ automatic GOMAXPROCS; either remove the opt-out or set GOMAXPROCS explicitly to ceil(cpu limit).",
+			Severity:    SeverityWarning,
+		}
+	case autoBuiltIn && current != "" && current != recommended:
+		return &Recommendation{
+			Field:       "env.GOMAXPROCS",
+			Current:     current,
+			Recommended: recommended,
+			Rationale:   fmt.Sprintf("GOMAXPROCS=%s does not match ceil(cpu limit)=%s; Go 1.25+ would compute %s automatically if GOMAXPROCS were unset.", current, recommended, recommended),
+			Severity:    SeverityInfo,
+		}
+	case !autoBuiltIn && current == "":
+		return &Recommendation{
+			Field:       "env.GOMAXPROCS",
+			Current:     "(unset)",
+			Recommended: recommended,
+			Rationale:   "Go < 1.25 runtime sees host CPU count and will oversubscribe under cpu limit; set GOMAXPROCS or import go.uber.org/automaxprocs.",
+			Severity:    SeverityWarning,
+		}
+	}
+	return nil
+}
+
+func (g GoAnalyzer) gomemlimitRec(cur CurrentSettings) *Recommendation {
+	memLim := readBytes(cur.Resources.Limits, corev1.ResourceMemory)
+	if memLim == 0 {
+		// fall back to request if limit unset
+		memLim = readBytes(cur.Resources.Requests, corev1.ResourceMemory)
+		if memLim == 0 {
+			return nil
+		}
+	}
+	current := cur.Env["GOMEMLIMIT"]
+	if current != "" {
+		// User explicitly set it; trust them (iter 1).
+		return nil
+	}
+	wantBytes := int64(float64(memLim) * 0.9)
+	wantMiB := int64(wantBytes / (1024 * 1024))
+	recommended := fmt.Sprintf("%dMiB", wantMiB)
+	return &Recommendation{
+		Field:       "env.GOMEMLIMIT",
+		Current:     "(unset)",
+		Recommended: recommended,
+		Rationale:   fmt.Sprintf("GC pacing improves when GOMEMLIMIT ≈ 0.9 × container memory limit (%s here).", recommended),
+		Severity:    SeverityWarning,
+	}
+}
+
+// goVersionAtLeast returns true if got >= want.
+// got is e.g. "1.26.0", want is e.g. "1.25".
+// Empty or malformed got → false.
+func goVersionAtLeast(got, want string) bool {
+	gMajor, gMinor, ok := parseSemverMM(got)
+	if !ok {
+		return false
+	}
+	wMajor, wMinor, ok := parseSemverMM(want)
+	if !ok {
+		return false
+	}
+	if gMajor != wMajor {
+		return gMajor > wMajor
+	}
+	return gMinor >= wMinor
+}
+
+func parseSemverMM(v string) (int, int, bool) {
+	if v == "" {
+		return 0, 0, false
+	}
+	// strip optional leading "go"
+	if len(v) >= 2 && v[:2] == "go" {
+		v = v[2:]
+	}
+	var major, minor int
+	n, _ := fmt.Sscanf(v, "%d.%d", &major, &minor)
+	if n < 2 {
+		return 0, 0, false
+	}
+	return major, minor, true
+}
+
+func containsGODEBUGOpt(godebug, opt string) bool {
+	if godebug == "" {
+		return false
+	}
+	// GODEBUG is comma-separated key=val pairs.
+	for _, kv := range splitCSV(godebug) {
+		if kv == opt {
+			return true
+		}
+	}
+	return false
+}
+
+func splitCSV(s string) []string {
+	var out []string
+	start := 0
+	for i := 0; i < len(s); i++ {
+		if s[i] == ',' {
+			out = append(out, s[start:i])
+			start = i + 1
+		}
+	}
+	out = append(out, s[start:])
+	return out
 }
 
 func (g GoAnalyzer) resourceRecs(obs ObservedMetrics, cur CurrentSettings, tol float64) []Recommendation {
