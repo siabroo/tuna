@@ -27,16 +27,19 @@ jobs:
 
       - name: Set image tag
         id: tag
-        run: echo "IMG=ghcr.io/${{ github.repository_owner }}/tuna:${GITHUB_REF_NAME}" >> $GITHUB_OUTPUT
+        env:
+          REPO_OWNER: ${{ github.repository_owner }}
+        run: echo "IMG=ghcr.io/${REPO_OWNER}/tuna:${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
 
       - name: Build and push image
         env:
           IMG: ${{ steps.tag.outputs.IMG }}
+          REPO_OWNER: ${{ github.repository_owner }}
         run: |
           docker build -t "$IMG" .
-          docker tag "$IMG" ghcr.io/${{ github.repository_owner }}/tuna:latest
+          docker tag "$IMG" "ghcr.io/${REPO_OWNER}/tuna:latest"
           docker push "$IMG"
-          docker push ghcr.io/${{ github.repository_owner }}/tuna:latest
+          docker push "ghcr.io/${REPO_OWNER}/tuna:latest"
 
       - name: Build install manifest
         env:

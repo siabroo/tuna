@@ -23,4 +23,6 @@ jobs:
         run: |
           make e2e-up
           make e2e
-          make e2e-down
+      - name: Teardown cluster
+        if: always()
+        run: make e2e-down
