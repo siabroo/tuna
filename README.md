@@ -143,14 +143,14 @@ Roadmap:
 
 ## Contributing
 
-PRs welcome. Run the full test suite before opening:
+PRs welcome. Two conventions to know up-front:
+
+1. **Never push directly to `main`.** Use feature branches (`feat/...`, `fix/...`) and open a PR.
+2. **Run lint + tests locally before pushing.** Same versions as CI:
 
 ```bash
-make lint test
+make lint test           # required before push
+make e2e-up e2e e2e-down # full e2e, optional but recommended for controller/analyzer changes
 ```
 
-For e2e:
-
-```bash
-make e2e-up e2e e2e-down
-```
+See [CONTRIBUTING.md](CONTRIBUTING.md) for branch conventions, commit message style, release process, and repository layout.

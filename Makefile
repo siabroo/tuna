@@ -35,8 +35,8 @@ envtest: ## Download envtest binaries.
 	$(SETUP_ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir=$(ENVTEST_ASSETS)
 
 .PHONY: lint
-lint: ## Run golangci-lint.
-	go run github.com/golangci/golangci-lint/cmd/golangci-lint run ./...
+lint: ## Run golangci-lint (pinned to same version as CI).
+	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2 run --timeout=5m
 
 KUSTOMIZE := go run sigs.k8s.io/kustomize/kustomize/v5
 
