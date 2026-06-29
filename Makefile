@@ -70,3 +70,32 @@ docker-build: ## Build the container image.
 .PHONY: docker-push
 docker-push: ## Push the container image.
 	docker push $(IMG)
+
+KIND_CLUSTER ?= tuna-e2e
+
+.PHONY: e2e-up
+e2e-up: ## Spin up kind + kube-prom-stack + tuna + sample-go-app
+	kind create cluster --name $(KIND_CLUSTER) --config testdata/kind-config.yaml
+	helm repo add prometheus-community https://prometheus-community.github.io/helm-charts || true
+	helm repo update
+	helm install kube-prom prometheus-community/kube-prometheus-stack \
+		--namespace monitoring --create-namespace \
+		--set grafana.enabled=false --wait
+	$(MAKE) docker-build IMG=tuna:e2e
+	kind load docker-image tuna:e2e --name $(KIND_CLUSTER)
+	cd test/samples/sample-go-app && docker build -t sample-go-app:dev . && cd ../../..
+	kind load docker-image sample-go-app:dev --name $(KIND_CLUSTER)
+	$(MAKE) deploy IMG=tuna:e2e
+	kubectl apply -f test/samples/sample-go-app/service.yaml
+	kubectl apply -f test/samples/sample-go-app/servicemonitor.yaml
+	kubectl apply -f test/samples/sample-go-app/deployment.yaml
+	@echo "Waiting 5min for samples to accumulate..."
+	@sleep 300
+
+.PHONY: e2e
+e2e: ## Run end-to-end test against an already-up kind cluster.
+	go test -race -count=1 -tags=e2e ./test/e2e/...
+
+.PHONY: e2e-down
+e2e-down: ## Delete the kind cluster.
+	kind delete cluster --name $(KIND_CLUSTER)
