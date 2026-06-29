@@ -14,6 +14,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	tunav1alpha1 "github.com/siabroo/tuna/api/v1alpha1"
+	"github.com/siabroo/tuna/internal/controller"
 )
 
 var (
@@ -61,7 +62,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Controllers will be wired here in subsequent tasks.
+	if err := controller.AddDiscoveryController(mgr); err != nil {
+		setupLog.Error(err, "unable to set up DiscoveryController")
+		os.Exit(1)
+	}
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up health check")
